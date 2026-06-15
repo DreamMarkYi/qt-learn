@@ -1,0 +1,65 @@
+name: build
+
+# 触发条件：推到 main / 开 PR 时跑
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  windows-mingw:
+    name: Windows (Qt 6.11 MinGW)
+    runs-on: windows-latest
+
+    steps:
+      # ① 把仓库代码拉到这台干净机器上
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ② 安装 Qt 6.11.1 + MinGW 工具链 + Multimedia 模块
+      #    arch 选 MinGW；modules 里必须带 qtmultimedia（项目用到 Multimedia/MultimediaWidgets）
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.11.1'
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          modules: 'qtmultimedia'
+          tools: 'tools_mingw1310'
+          cache: true
+
+      # ③ 让 MinGW 的 gcc/g++ 进 PATH（install-qt-action 把它装到 Qt/Tools 下）
+      - name: Add MinGW to PATH
+        shell: pwsh
+        run: |
+          $mingw = Get-ChildItem "${{ env.IQTA_TOOLS }}" -Recurse -Filter g++.exe |
+                   Select-Object -First 1
+          if (-not $mingw) { throw "找不到 MinGW g++" }
+          $bin = Split-Path $mingw.FullName
+          echo "$bin" >> $env:GITHUB_PATH
+          Write-Host "MinGW bin: $bin"
+
+      # ④ Configure：用 Ninja 生成器，find_package 此刻去定位 Qt
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=gcc
+          -DCMAKE_CXX_COMPILER=g++
+
+      # ⑤ Build：真正调编译器，任何一处编译/链接失败 → 非零退出 → 流水线标红
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config Release
+
+      # ⑥ 把编译出的可执行文件留作产物（可选，方便下载验证）
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-learn-windows
+          path: build/qt-learn.exe
+          if-no-files-found: warn

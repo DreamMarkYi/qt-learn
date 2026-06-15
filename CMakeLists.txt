@@ -32,7 +32,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         GlCompositor.cpp
         Shader/composite.vert
         Shader/composite.frag
-        Shader.qrc
+        shader.qrc
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET qt-learn APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
