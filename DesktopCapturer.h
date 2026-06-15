@@ -7,6 +7,7 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QDebug>
+#include <QThread>
 
 #include "CameraManager.h"
 #include "FFmpegStreamer.h"
@@ -30,7 +31,13 @@ public:
         m_streamer = new FFmpegStreamer(this);
 
         // 4. 本地 GPU 合成器，把两路捕获接到它的 sink 上
-        m_compositor = new GlCompositor(this);
+        m_compositor = new GlCompositor();
+        m_renderThread = new QThread(this);
+        m_compositor->moveToThread(m_renderThread);
+        connect(m_renderThread, &QThread::started,
+                m_compositor, &GlCompositor::init);
+        m_renderThread->start();
+
         m_screenSession->setVideoSink(m_compositor->screenSink());
         m_cameraManager->setVideoSink(m_compositor->cameraSink());
 
@@ -81,6 +88,17 @@ public:
     ~DesktopCapturer() {
         stopAllPreviews();
         stopPush();
+
+        if (m_renderThread->isRunning()) {
+            QMetaObject::invokeMethod(m_compositor, "cleanup",
+                                      Qt::BlockingQueuedConnection);
+        }
+        // ② 退出事件循环并等线程结束
+        m_renderThread->quit();
+        m_renderThread->wait();
+        // ③ compositor 没 parent，手动删（此时已在主线程，且 GL 已清空）
+        delete m_compositor;
+        m_compositor = nullptr;
     }
 
 signals:
@@ -92,7 +110,8 @@ private:
     QMediaCaptureSession* m_screenSession = nullptr;
     CameraManager* m_cameraManager = nullptr;
     FFmpegStreamer* m_streamer = nullptr;
-    GlCompositor* m_compositor = nullptr;
+    GlCompositor* m_compositor = nullptr;     // ⚠️ 无 parent，手动管理
+    QThread* m_renderThread = nullptr;
 };
 
 #endif // DESKTOPCAPTURER_H

@@ -148,3 +148,52 @@ void GlCompositor::onScreenFrame(const QVideoFrame &screenFrame) {
     if (!out.isNull())
         emit frameReady(out.convertToFormat(QImage::Format_ARGB32));
 }
+
+void GlCompositor::init()
+{
+    QSurfaceFormat fmt;
+    fmt.setRenderableType(QSurfaceFormat::OpenGL);
+    fmt.setVersion(3, 3);
+    fmt.setProfile(QSurfaceFormat::CoreProfile);
+
+    // 上下文不设 parent：它属于当前线程，由 cleanup() 显式删除。
+    m_ctx = new QOpenGLContext();
+    m_ctx->setFormat(fmt);
+    if (!m_ctx->create()) {
+        qFatal("错误：无法创建需要的 OpenGL 上下文！请检查显卡驱动。");
+    }
+    qDebug() << "成功创建 OpenGL 上下文，实际版本为:"
+             << m_ctx->format().version()
+             << " 线程:" << QThread::currentThread();
+
+    m_surface = new QOffscreenSurface();   // 同样不设 parent
+    m_surface->setFormat(fmt);
+    m_surface->create();
+
+    m_ctx->makeCurrent(m_surface);
+    initializeOpenGLFunctions();
+    buildGl();
+    m_ctx->doneCurrent();
+}
+
+// ── 在渲染线程里释放所有 GL 资源（上下文 current 状态下执行）──
+void GlCompositor::cleanup()
+{
+    if (!m_ctx) return;
+    m_ctx->makeCurrent(m_surface);
+
+    if (m_texScreen) { glDeleteTextures(1, &m_texScreen); m_texScreen = 0; }
+    if (m_texCamera) { glDeleteTextures(1, &m_texCamera); m_texCamera = 0; }
+
+    m_vao.destroy();
+    m_vbo.destroy();
+    m_ebo.destroy();
+    delete m_prog;  m_prog = nullptr;
+    delete m_fbo;   m_fbo  = nullptr;
+
+    m_ctx->doneCurrent();
+
+    delete m_surface; m_surface = nullptr;
+    delete m_ctx;     m_ctx     = nullptr;
+    qDebug() << "🧹 [GL] 渲染资源已在工作线程释放";
+}

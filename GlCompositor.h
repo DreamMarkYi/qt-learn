@@ -14,48 +14,22 @@
 #include <QOpenGLBuffer>
 #include <QOpenGLVertexArrayObject>
 #include <QDebug>
+#include <QThread>
 
 class GlCompositor : public QObject, protected QOpenGLFunctions_3_3_Core
 {
     Q_OBJECT;
 public:
     explicit GlCompositor(QObject *parent = nullptr) : QObject(parent) {
-        QSurfaceFormat fmt;
-        fmt.setRenderableType(QSurfaceFormat::OpenGL);//指定渲染类型
-        fmt.setVersion(3, 3);//指定OpenGL的格式
-        fmt.setProfile(QSurfaceFormat::CoreProfile);//设置openGL的模式
-
-        m_ctx = new QOpenGLContext(this);//向内存申请了一块空间，实例化了一个 Qt 的上下文管理对象
-        m_ctx->setFormat(fmt);//设置格式
-        m_ctx->create();//创建，我的理解就是分配了一块内存
-
-        if (!m_ctx->create()) {
-            qFatal("错误：无法创建需要的 OpenGL 上下文！请检查显卡驱动。");
-        }
-
-        // 检查显卡最终实际给你的版本是不是你想要的（有时候系统会拒绝或降级）
-        qDebug() << "成功创建 OpenGL 上下文，实际版本为:"
-                 << m_ctx->format().version();
-
-        //创建一个离屏对象
-        m_surface = new QOffscreenSurface(nullptr, this);
-        m_surface->setFormat(fmt);
-        m_surface->create();
-
         m_screenSink = new QVideoSink(this);
         m_cameraSink = new QVideoSink(this);
 
-
-        //QVideoSink接收原始视频帧
+        // sink 的信号槽是 Qt::AutoConnection：发送方(媒体线程)与接收方
+        // (本对象所在的渲染线程)不同线程时，自动变成队列连接，线程安全。
         connect(m_screenSink, &QVideoSink::videoFrameChanged,
                 this, &GlCompositor::onScreenFrame);
         connect(m_cameraSink, &QVideoSink::videoFrameChanged, this,
                 [this](const QVideoFrame &f) { m_lastCamera = f; });
-
-        m_ctx->makeCurrent(m_surface);//绑定
-        initializeOpenGLFunctions();
-        buildGl();
-        m_ctx->doneCurrent();//初始化之后先释放，后续再调用？
     }
 
     QVideoSink* screenSink() const { return m_screenSink; }
@@ -64,7 +38,15 @@ public:
     void setOverlay(bool on) { m_overlay = on; }
     bool overlay() const { return m_overlay; }
 
-//释放渲染完毕信号
+public slots:
+    // 在渲染线程里执行：创建上下文 + 离屏面 + 编译着色器。
+    // 由 QThread::started 触发，保证 GL 上下文归属工作线程。
+    void init();
+
+    // 在渲染线程里执行：上下文 current 状态下释放所有 GL 资源。
+    // 线程退出前用 BlockingQueuedConnection 调一次。
+    void cleanup();
+
 signals:
     void frameReady(const QImage &frame);
 
