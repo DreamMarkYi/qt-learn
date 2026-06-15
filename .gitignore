@@ -1,0 +1,45 @@
+# ---- 构建产物 ----
+build/
+build-*/
+*.o
+*.obj
+*.exe
+*.dll
+*.a
+*.so
+*.dylib
+
+# ---- CMake ----
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+*.cmake.tmp
+CMakeLists.txt.tmp.*
+CMakeLists.txt.user*
+
+# ---- Qt Creator / IDE ----
+*.user
+*.user.*
+.qtcreator/
+*.autosave
+*.qmlproject.user*
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.qm
+
+# ---- clangd / 缓存 ----
+.qtc_clangd/
+.cache/
+*.idx
+
+# ---- 系统/编辑器 ----
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
