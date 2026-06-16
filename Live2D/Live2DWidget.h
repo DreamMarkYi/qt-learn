@@ -8,7 +8,8 @@
 #include "Live2DModel.h"
 #include "Live2DRenderer.h"
 #include <Math/CubismMatrix44.hpp>
-
+#include <QTimer>
+#include <QElapsedTimer>
 // 独立显示一个 Live2D 模型的 OpenGL 窗口部件。
 // 不播动画、不接推流：加载模型 → 每帧用自定义渲染器画静止姿态。
 class Live2DWidget : public QOpenGLWidget
@@ -32,6 +33,8 @@ private:
     Live2DRenderer _renderer;
     bool _ready = false;
     int  _vpW = 1, _vpH = 1;
+    QTimer        _timer;
+    QElapsedTimer _clock;
 };
 
 #endif // LIVE2D_WIDGET_H

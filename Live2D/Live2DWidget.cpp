@@ -34,6 +34,18 @@ void Live2DWidget::initializeGL()
         return;
     }
     _ready = true;
+
+    _model.startMotion(_dir + "/motions/mtn_01.motion3.json", true);
+
+    // 启动 60fps 定时器
+    connect(&_timer, &QTimer::timeout, this, [this]() {
+        float dt = _clock.elapsed() / 1000.0f;  // 毫秒转秒
+        _clock.restart();
+        _model.updateMotion(dt);                 // 推进动作 + Update()
+        update();                                // 触发 paintGL
+    });
+    _clock.start();
+    _timer.start(16);   // 约 60fps
 }
 
 void Live2DWidget::resizeGL(int w, int h)

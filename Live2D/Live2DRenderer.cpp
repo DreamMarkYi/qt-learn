@@ -217,6 +217,13 @@ void Live2DRenderer::draw(const float* mvp16)
         if (d.textureIndex >= 0 && d.textureIndex < (int)_textures.size())
             glBindTexture(GL_TEXTURE_2D, _textures[d.textureIndex]);
 
+        const csmInt32 vtxCount = m->GetDrawableVertexCount(di);
+        const Core::csmVector2* positions = m->GetDrawableVertexPositions(di);
+
+        glBindBuffer(GL_ARRAY_BUFFER, d.vboPos);
+        glBufferSubData(GL_ARRAY_BUFFER, 0,
+            sizeof(Core::csmVector2) * vtxCount, positions);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
         // VAO 已记住顶点布局，直接绑定后绘制
         glBindVertexArray(d.vao);
         glDrawElements(GL_TRIANGLES, d.indexCount, GL_UNSIGNED_SHORT, nullptr);
