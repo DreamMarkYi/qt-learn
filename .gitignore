@@ -43,3 +43,11 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+
+# ---- Live2D SDK 预编译二进制（需随仓库保留，覆盖上面的 *.dll / *.a / *.lib 规则）----
+!third_party/CubismSdk/Core/**/*.dll
+!third_party/CubismSdk/Core/**/*.lib
+!third_party/CubismSdk/Core/**/*.so
+!third_party/CubismSdk/Core/**/*.dylib
+!third_party/CubismSdk/Core/**/*.a
+!third_party/CubismSdk/Core/**/*.bundle
