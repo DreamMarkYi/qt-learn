@@ -146,6 +146,7 @@ qt_add_executable(live2d_viewer
     Live2D/Live2DModel.h     Live2D/Live2DModel.cpp
     Live2D/Live2DRenderer.h  Live2D/Live2DRenderer.cpp
     Live2DAllocator.h
+
 )
 target_link_libraries(live2d_viewer PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets

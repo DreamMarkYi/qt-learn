@@ -24,6 +24,7 @@ protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
     void paintGL() override;
+    void keyPressEvent(QKeyEvent* e) override;   // 按 S 导出蒙版 PNG
 
 private:
     void computeMvp(float* out16) const;   // 输出列主序 16 floats

@@ -73,6 +73,8 @@ bool Live2DModel::load(const QString& dir, const QString& fileName)
         reinterpret_cast<const csmByte*>(settingBytes.constData()),
         static_cast<csmSizeInt>(settingBytes.size()));
 
+
+
     // 2) 读 moc3 建模型。CubismMoc::Create 内部会 CSM_MALLOC_ALIGNED + memcpy
     //    做对齐，所以这里传非对齐的 QByteArray 字节完全没问题。
     const char* mocFile = _setting->GetModelFileName();

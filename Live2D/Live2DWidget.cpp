@@ -2,6 +2,7 @@
 
 #include <Math/CubismModelMatrix.hpp>
 #include <QDebug>
+#include <QKeyEvent>
 
 using namespace Live2D::Cubism::Framework;
 
@@ -10,6 +11,7 @@ Live2DWidget::Live2DWidget(QString dir, QString fileName, QWidget* parent)
 {
     resize(600, 800);
     setWindowTitle(QStringLiteral("Live2D 自定义渲染器"));
+    setFocusPolicy(Qt::StrongFocus);   // 接收键盘事件（按 S 导出蒙版）
 }
 
 Live2DWidget::~Live2DWidget()
@@ -34,6 +36,9 @@ void Live2DWidget::initializeGL()
         return;
     }
     _ready = true;
+
+    // 首帧自动把蒙版导出到模型目录，方便检查；之后可按 S 重导。
+    _renderer.requestMaskDump(_dir);
 
     _model.startMotion(_dir + "/motions/mtn_01.motion3.json", true);
 
@@ -81,5 +86,17 @@ void Live2DWidget::paintGL()
 
     float mvp[16];
     computeMvp(mvp);
-    _renderer.draw(mvp);
+    // 蒙版离屏纹理与主绘制用同一套视口尺寸，保证屏幕坐标 ↔ 蒙版坐标对齐。
+    _renderer.draw(mvp, _vpW, _vpH);
+}
+
+// 按 S：把当前帧的离屏蒙版纹理导出为 PNG 到模型目录。
+void Live2DWidget::keyPressEvent(QKeyEvent* e)
+{
+    if (e->key() == Qt::Key_S) {
+        _renderer.requestMaskDump(_dir);
+        update();   // 触发一帧，导出在 draw 内完成
+    } else {
+        QOpenGLWidget::keyPressEvent(e);
+    }
 }

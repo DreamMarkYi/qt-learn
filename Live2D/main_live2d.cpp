@@ -16,8 +16,8 @@ int main(int argc, char* argv[])
     fmt.setSamples(4);                 // MSAA，边缘更顺滑
     QSurfaceFormat::setDefaultFormat(fmt);
 
-    const QString dir  = QStringLiteral("D:/My project (6)/Assets/Live2D/Cubism/Samples/Models/Mao");
-    const QString file = QStringLiteral("Mao.model3.json");
+    const QString dir  = QStringLiteral("D:/My project (6)/Assets/Live2D/Cubism/Samples/Models/Rice");
+    const QString file = QStringLiteral("Rice.model3.json");
 
     Live2DWidget w(dir, file);
     w.show();
