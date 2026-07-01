@@ -12,6 +12,9 @@
 #include "CameraManager.h"
 #include "FFmpegStreamer.h"
 #include "GlCompositor.h"
+#include "L2dLayer.h"
+#include "PoseFrameClient.h"
+#include "PoseBus.h"
 
 class DesktopCapturer : public QObject
 {
@@ -32,6 +35,28 @@ public:
 
         // 4. 本地 GPU 合成器，把两路捕获接到它的 sink 上
         m_compositor = new GlCompositor();
+
+        // 4.4 姿态/表情数据总线（PoseFrameClient 写，L2dLayer 在渲染线程读）。
+        //     须在渲染线程启动前注入给 L2dLayer，避免 setPoseBus 与 render 竞争。
+        m_poseBus = new PoseBus();
+
+        // 4.5 注册 Live2D 人物层（方案 B：先渲染到离屏纹理再合成）。
+        //     必须在 moveToThread/init 之前 addLayer——init() 会在渲染线程里
+        //     连同各层一起建 GL 资源。离屏渲染尺寸 720x1080，贴到输出左下角。
+        {
+            const QString dir  = QStringLiteral(
+                "D:/My project (5)/Assets/海洋 模型");
+            const QString modelFile  = QStringLiteral("海洋.model3.json");
+            const QString motionFile = QStringLiteral("motions/mtn_01.motion3.json");
+            const QSize outSize = m_compositor->outputSize();   // 1920x1080
+            const QSize l2dSize(720, 1080);
+            const QRect placement(240, outSize.height() - 1080, 720, 1080); // 左下
+            auto l2d = std::make_unique<L2dLayer>(
+                dir, modelFile, motionFile, l2dSize, placement);
+            l2d->setPoseBus(m_poseBus);                 // 注入表情数据源
+            m_compositor->addLayer(std::move(l2d));
+        }
+
         m_renderThread = new QThread(this);
         m_compositor->moveToThread(m_renderThread);
         connect(m_renderThread, &QThread::started,
@@ -40,6 +65,14 @@ public:
 
         m_screenSession->setVideoSink(m_compositor->screenSink());
         m_cameraManager->setVideoSink(m_compositor->cameraSink());
+
+        // 4.6 骨骼检测：tap 摄像头 sink 的帧，发给 Python 边车做 Pose 检测。
+        //     cameraSink 在渲染线程发信号，m_poseClient 在主线程 → 自动队列连接，
+        //     拷一份 QVideoFrame 过来，不阻塞渲染。
+        m_poseClient = new PoseFrameClient(QStringLiteral("127.0.0.1"), 5066, this);
+        m_poseClient->setBus(m_poseBus);                // 收到的姿态/表情写入总线
+        connect(m_compositor->cameraSink(), &QVideoSink::videoFrameChanged,
+                m_poseClient, &PoseFrameClient::onFrame);
 
         // 5. 合成帧出炉：一路预览(转发给 UI)，一路推流
         connect(m_compositor, &GlCompositor::frameReady, this,
@@ -63,9 +96,15 @@ public:
         qDebug() << "⏹️ [总控] 本地预览已关闭";
     }
 
-    // 🚀 开启推流：用合成器当前的输出尺寸告诉 ffmpeg
+    // 🚀 开启推流：输入用合成器当前尺寸，输出固定缩放到 1080p（FFmpeg scale），
+    //    音频抓 VoiceMeeter 的 B1 虚拟输出（桌面音乐 + Voicemod 变声人声在此混好）。
+    //    设备名须与 `ffmpeg -list_devices` 列出的完全一致（逐字精确匹配）。
+    //    前提：系统默认输出设为 Voicemeeter Input；Voicemod 虚拟麦接一路硬件输入；
+    //    两路都路由到 B1；监听用 A1 接物理耳机。
     void startPush() {
-        m_streamer->startPush(m_compositor->outputSize(), 25);
+        const QString audioDevice = "Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)";
+        m_streamer->startPush(m_compositor->outputSize(), 25, QSize(1280, 720),
+                              audioDevice);
     }
 
     void stopPush() { m_streamer->stopPush(); }
@@ -99,6 +138,9 @@ public:
         // ③ compositor 没 parent，手动删（此时已在主线程，且 GL 已清空）
         delete m_compositor;
         m_compositor = nullptr;
+        // ④ 总线在渲染线程停止、compositor 删除后再删（确保无人再读）
+        delete m_poseBus;
+        m_poseBus = nullptr;
     }
 
 signals:
@@ -112,6 +154,8 @@ private:
     FFmpegStreamer* m_streamer = nullptr;
     GlCompositor* m_compositor = nullptr;     // ⚠️ 无 parent，手动管理
     QThread* m_renderThread = nullptr;
+    PoseFrameClient* m_poseClient = nullptr;  // 骨骼检测边车客户端
+    PoseBus* m_poseBus = nullptr;             // 姿态/表情数据总线（无 parent，手动删）
 };
 
 #endif // DESKTOPCAPTURER_H

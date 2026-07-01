@@ -2,5 +2,6 @@
     <qresource prefix="/Shader">
         <file>Shader/composite.frag</file>
         <file>Shader/composite.vert</file>
+        <file>Shader/composite_nv12.frag</file>
     </qresource>
 </RCC>

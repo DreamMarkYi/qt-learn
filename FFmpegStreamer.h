@@ -19,34 +19,74 @@ public:
         });
     }
 
-    // 🚀 开启推流：size 是输入原始帧的尺寸，fps 是帧率
-    void startPush(const QSize &size, int fps = 25) {
+    // 🚀 开启推流：size 是输入原始帧尺寸，fps 是帧率，
+    //    outSize 是推流输出尺寸（默认无效=不缩放，与输入同尺寸）。
+    //    audioDevice 是 Windows DirectShow 音频设备名（空=不推声音）。
+    //      取设备名：命令行跑 ffmpeg -list_devices true -f dshow -i dummy
+    //      麦克风类似 "麦克风 (Realtek Audio)"；要推“系统声音”需开启
+    //      “立体声混音(Stereo Mix)”或装虚拟声卡(VB-CABLE/virtual-audio-capturer)。
+    void startPush(const QSize &size, int fps = 25, const QSize &outSize = QSize(),
+                   const QString &audioDevice = QString()) {
         if (m_ffmpegProcess->state() == QProcess::Running) return;
 
-        m_frameSize = size;
+        m_frameSize = size;                    // 写帧校验用的是输入尺寸，不是输出尺寸
+
+        // 输出尺寸：无效或与输入相同则不加 scale（省一道缩放）
+        const bool doScale = outSize.isValid() && outSize != size;
+        const bool hasAudio = !audioDevice.isEmpty();
 
         QString aliyunIP = "8.152.169.7";
         QString rtmpUrl = QString("rtmp://%1:1935/live/livestream").arg(aliyunIP);
 
         QStringList args;
-        // —— 输入：从 stdin 读 BGRA 原始帧 ——
-        args << "-f" << "rawvideo"
+        // —— 输入0：从 stdin 读 BGRA 原始帧 ——
+        // 管道帧无时间戳，用 wallclock 打实时时间戳，便于与实时音频对齐(音画同步)
+        args << "-use_wallclock_as_timestamps" << "1"
+             << "-f" << "rawvideo"
              << "-pixel_format" << "bgra"      // 对应 QImage::Format_ARGB32(小端=BGRA)
              << "-video_size" << QString("%1x%2").arg(size.width()).arg(size.height())
              << "-framerate" << QString::number(fps)
-             << "-i" << "-"                     // '-' 表示从标准输入读
-        // —— 编码：H.264 ——
-             << "-vcodec" << "libx264"
+             << "-i" << "-";                    // '-' 表示从标准输入读
+        // —— 输入1：DirectShow 音频设备（可选）——
+        if (hasAudio) {
+            args << "-f" << "dshow"
+                 << "-rtbufsize" << "100M"      // 🟢 为音频输入设置缓冲区，防止大流量时音频数据被 Windows 丢弃
+                 << "-i" << QString("audio=%1").arg(audioDevice);
+        }
+
+        // ====== 缩放滤镜 ======
+        if (doScale) {
+            // 🟢 如果需要缩放，强制使用最快的算法（fast_bilinear），默认算法很吃 CPU
+            args << "-vf" << QString("scale=%1:%2:flags=fast_bilinear").arg(outSize.width()).arg(outSize.height());
+        }
+
+        // ====== 视频编码器优化：空间换时间 ======
+        args << "-vcodec" << "libx264"
              << "-preset" << "ultrafast"
              << "-tune" << "zerolatency"
-             << "-pix_fmt" << "yuv420p"         // 编码输出标准像素格式
-        // —— 封装 + 目的地 ——
-             << "-f" << "flv"
+             << "-b:v" << "1000k"         // 目标视频码率
+             << "-maxrate" << "1000k"     // 最大允许码率
+             << "-bufsize" << "2000k"     // 严格控制发送缓存
+             << "-threads" << "4"               // 🟢 显式指定多线程编码（根据你的CPU核心数调整，如4或8）
+             << "-g" << QString::number(fps * 2)// 🟢 强制设置关键帧间隔（GOP），防止网络播放端卡顿
+             << "-crf" << "26"
+             << "-pix_fmt" << "yuv420p";
+
+        // ====== 音频编码与同步 ======
+
+            args << "-map" << "0:v:0";
+
+
+        // ====== 封装优化 ======
+        args << "-f" << "flv"
+             << "-flvflags" << "no_duration_filesize"
              << rtmpUrl;
 
         m_ffmpegProcess->start("ffmpeg", args);
         m_ffmpegProcess->waitForStarted();
-        qDebug() << "🚀 [FFmpeg] 纯编码推流已启动" << size << fps << "fps";
+        qDebug() << "🚀 [FFmpeg] 推流已启动 输入" << size
+                 << "输出" << (doScale ? outSize : size) << fps << "fps"
+                 << "音频" << (hasAudio ? audioDevice : QStringLiteral("无"));
     }
 
     // 写入一帧合成画面。返回 false 表示因背压丢帧或未在推流。

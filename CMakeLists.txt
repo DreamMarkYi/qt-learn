@@ -9,8 +9,14 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# MinGW (CLion bundled): GCC 13 emits DWARF-5 by default, but the bundled
+# binutils `as` rejects `-gdwarf-5`. Force DWARF-4 for all targets.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-gdwarf-4>)
+endif()
+
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets )
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Multimedia MultimediaWidgets OpenGL OpenGLWidgets)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Multimedia MultimediaWidgets OpenGL OpenGLWidgets Network)
 
 # ============================================================================
 # Live2D Cubism SDK (OpenGL backend)
@@ -76,8 +82,16 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         CameraManager.h
         GlCompositor.h
         GlCompositor.cpp
+        ICompositorLayer.h
+        OffscreenTarget.h
+        L2dModel.h        L2dModel.cpp
+        L2dRenderer.h     L2dRenderer.cpp
+        L2dLayer.h        L2dLayer.cpp
+        PoseTypes.h       PoseBus.h
+        PoseFrameClient.h PoseFrameClient.cpp
         Shader/composite.vert
         Shader/composite.frag
+        Shader/composite_nv12.frag
         shader.qrc
         Live2DAllocator.h
     )
@@ -100,7 +114,7 @@ else()
 endif()
 
 target_link_libraries(qt-learn PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt6::Multimedia
-    Qt6::MultimediaWidgets  Qt6::OpenGL                       # 新增
+    Qt6::MultimediaWidgets  Qt6::OpenGL  Qt6::Network          # 新增 Network: pose 边车 TCP
     Framework                                                 # Live2D (Core + GLEW transitively)
     opengl32   )
 

@@ -83,5 +83,21 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    // ⚠️ 关闭顺序至关重要：必须先把后台管线（渲染线程）停掉，再删 UI。
+    //
+    // 原因：m_capturer 是 MainWindow 的子对象，按 Qt 规则它要等 ~MainWindow
+    // 函数体执行完、进入 ~QObject 阶段才被销毁。若此处直接 `delete ui`，会先
+    // 删掉 m_previewLabel，而渲染线程此刻仍在以 60fps 跑 renderTick →
+    // emit frameReady → emit previewFrame，跨线程投递到 MainWindow 的 lambda
+    // 里访问已成悬空指针的 m_previewLabel，导致关窗崩溃 / 卡死。
+    //
+    // 显式先 delete m_capturer：它的析构会 stopAllPreviews/stopPush，并对渲染
+    // 线程 quit() + wait()，等线程彻底停下、不再有任何 previewFrame 回调之后，
+    // 再删 UI 就安全了。delete 子对象会自动把它从父对象的 children 列表移除，
+    // 不会被 ~QObject 二次删除。
+    if (m_capturer) {
+        delete m_capturer;
+        m_capturer = nullptr;
+    }
     delete ui;
 }
